@@ -2,7 +2,7 @@
 #include <Psapi.h>
 #include <iostream>
 
-int main() {
+int wmain() {
 
 	HANDLE hToken = nullptr;
 	TOKEN_PRIVILEGES TokenPrivileges = { 0 };
