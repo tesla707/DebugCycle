@@ -1,6 +1,5 @@
 #include <Windows.h>
 #include <Psapi.h>
-//#include <TlHelp32.h>
 #include <iostream>
 
 #if _UNCIDOE || UNICODE
@@ -94,7 +93,6 @@ Release: if (hToken) CloseHandle(hToken);
 			hMod = LoadLibrary(Data.cFileName);
 			if (!hMod) hMod = LoadLibrary(FileName);
 			tcout << Data.cFileName << TEXT(" - 0x") << hMod << std::endl;
-			//if (tcscmp(Data.cFileName, TEXT("IGO32.dll")) == 0) tcout << TEXT(" --- ") << Data.cFileName << std::endl;
 			break;
 
 		case UNLOAD_DLL_DEBUG_EVENT:
