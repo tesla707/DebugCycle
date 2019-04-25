@@ -36,6 +36,7 @@ int tmain() {
 
 	if (ERROR_SUCCESS != GetLastError()) {
 		tcout << TEXT("Privileges succeeded, but last error = 0x") << std::hex << GetLastError() << std::endl;
+		goto Release;
 	}
 
 	tcout << TEXT("Debug Privileges Enabled!\n") << std::endl;
