@@ -1,15 +1,28 @@
 #include <Windows.h>
 #include <Psapi.h>
+//#include <TlHelp32.h>
 #include <iostream>
 
-int wmain() {
+#if _UNCIDOE || UNICODE
+#define tmain wmain
+#define tcout std::wcout
+#define tcin std::wcin
+#define tcscmp wcscmp
+#else
+#define tmain main
+#define tcout std::cout
+#define tcin std::cin
+#define tcscmp strcmp
+#endif // _UNCIDOE || UNICODE
+
+int tmain() {
 
 	HANDLE hToken = nullptr;
 	TOKEN_PRIVILEGES TokenPrivileges = { 0 };
 	constexpr auto SE_DEBUG_PRIVILEGE = (20L);
 
 	if (!OpenProcessToken(INVALID_HANDLE_VALUE, TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken)) {
-		std::wcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
+		tcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
 		goto Release;
 	}
 
@@ -18,29 +31,29 @@ int wmain() {
 	TokenPrivileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
 
 	if (!AdjustTokenPrivileges(hToken, FALSE, &TokenPrivileges, sizeof(TOKEN_PRIVILEGES), nullptr, nullptr)) {
-		std::wcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
+		tcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
 		goto Release;
 	}
 
 	if (ERROR_SUCCESS != GetLastError()) {
-		std::wcout << TEXT("Privileges succeeded, but last error = 0x") << std::hex << GetLastError() << std::endl;
+		tcout << TEXT("Privileges succeeded, but last error = 0x") << std::hex << GetLastError() << std::endl;
 	}
 
-	std::wcout << TEXT("Debug Privileges Enabled!") << std::endl;
+	tcout << TEXT("Debug Privileges Enabled!\n") << std::endl;
 
 Release: if (hToken) CloseHandle(hToken);
 
-	std::wcout << TEXT("Enter ProcessId: ");
+	tcout << TEXT("Enter ProcessId: ");
 	DWORD dwProcessId = 0;
-	std::wcin >> dwProcessId;
-	std::wcin.get();
+	tcin >> dwProcessId;
+	tcin.get();
 
 	if (!DebugActiveProcess(dwProcessId)) {
-		std::wcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
-		std::wcin.get();
+		tcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
+		tcin.get();
 		exit(-1);
 	}
-	else std::wcout << TEXT("Process attached!") << std::endl;
+	else tcout << TEXT("Process attached!\n") << std::endl;
 
 	HANDLE hProcess = nullptr;
 	DEBUG_EVENT DbgEvent = { 0 };
@@ -52,8 +65,8 @@ Release: if (hToken) CloseHandle(hToken);
 
 	do {
 		if (!WaitForDebugEvent(&DbgEvent, INFINITE)) {
-			std::wcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
-			std::wcin.get();
+			tcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
+			tcin.get();
 			exit(-1);
 		}
 
@@ -63,7 +76,7 @@ Release: if (hToken) CloseHandle(hToken);
 			break;
 
 		case CREATE_THREAD_DEBUG_EVENT:
-			std::wcout << DbgEvent.dwThreadId << TEXT(" --- 0x") << DbgEvent.u.CreateThread.lpStartAddress << std::endl;
+			tcout << TEXT(" dwThreadId: ") << DbgEvent.dwThreadId << TEXT(" (Start Address: 0x") << DbgEvent.u.CreateThread.lpStartAddress << TEXT(", Name: )") << std::endl;
 			break;
 
 		case CREATE_PROCESS_DEBUG_EVENT:
@@ -80,7 +93,8 @@ Release: if (hToken) CloseHandle(hToken);
 			FindFirstFile(FileName, &Data);
 			hMod = LoadLibrary(Data.cFileName);
 			if (!hMod) hMod = LoadLibrary(FileName);
-			std::wcout << Data.cFileName << TEXT(" - 0x") << hMod << std::endl;
+			tcout << Data.cFileName << TEXT(" - 0x") << hMod << std::endl;
+			//if (tcscmp(Data.cFileName, TEXT("IGO32.dll")) == 0) tcout << TEXT(" --- ") << Data.cFileName << std::endl;
 			break;
 
 		case UNLOAD_DLL_DEBUG_EVENT:
@@ -100,18 +114,18 @@ Release: if (hToken) CloseHandle(hToken);
 
 	} while (DbgEvent.u.ExitProcess.dwExitCode != 0);
 
-	std::wcin.get();
+	tcin.get();
 
 	CloseHandle(hProcess);
 
 	if (!DebugActiveProcessStop(dwProcessId)) {
-		std::wcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
-		std::wcin.get();
+		tcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
+		tcin.get();
 		exit(-1);
 	}
-	else std::wcout << TEXT("Process detached!") << std::endl;
+	else tcout << TEXT("Process detached!") << std::endl;
 
-	std::wcin.get();
+	tcin.get();
 
 	return 0;
 }
