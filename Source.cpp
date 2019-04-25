@@ -75,7 +75,9 @@ Release: if (hToken) CloseHandle(hToken);
 			break;
 
 		case CREATE_THREAD_DEBUG_EVENT:
-			tcout << TEXT(" dwThreadId: ") << DbgEvent.dwThreadId << TEXT(" (Start Address: 0x") << DbgEvent.u.CreateThread.lpStartAddress << TEXT(", Name: )") << std::endl;
+			case CREATE_THREAD_DEBUG_EVENT:
+			tcout << TEXT(" dwThreadId: ") << DbgEvent.dwThreadId << TEXT(" (Start Address: 0x")
+				<< DbgEvent.u.CreateThread.lpStartAddress << TEXT(", Name: )") << std::endl;
 			break;
 
 		case CREATE_PROCESS_DEBUG_EVENT:
