@@ -1,8 +1,9 @@
 #include <Windows.h>
 #include <Psapi.h>
+#include <TlHelp32.h>
 #include <iostream>
 
-#if _UNCIDOE || UNICODE
+#ifdef UNICODE
 #define tmain wmain
 #define tcout std::wcout
 #define tcin std::wcin
@@ -12,13 +13,27 @@
 #define tcout std::cout
 #define tcin std::cin
 #define tcscmp strcmp
-#endif // _UNCIDOE || UNICODE
+#endif // !UNICODE
 
 int tmain() {
-
-	HANDLE hToken = nullptr;
+	//====================================================================================================================
+	//=============================================== Global values ======================================================
+	//====================================================================================================================
+	
+	HANDLE hToken = nullptr, hSnapshop = nullptr, hProcess = nullptr;
 	TOKEN_PRIVILEGES TokenPrivileges = { 0 };
 	constexpr auto SE_DEBUG_PRIVILEGE = (20L);
+	PROCESSENTRY32 ProcessEntry = { sizeof(PROCESSENTRY32) };
+	DEBUG_EVENT DebugEvent = { 0 };
+	TCHAR ProcessName[MAX_PATH] = TEXT(""), ModuleName[MAX_PATH] = TEXT("");
+	WIN32_FIND_DATA Win32FindData = { 0 };
+	HMODULE hModule[1024] = { 0 };
+	MODULEINFO ModuleInfo = { 0 };
+	DWORD dwProcessId = 0, cbNeeded = 0, ThreadExitCode = 0;
+
+	//====================================================================================================================
+	//============================================== Debug privileges ====================================================
+	//====================================================================================================================
 
 	if (!OpenProcessToken(INVALID_HANDLE_VALUE, TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &hToken)) {
 		tcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
@@ -39,14 +54,30 @@ int tmain() {
 		goto Release;
 	}
 
-	tcout << TEXT("Debug Privileges Enabled!\n") << std::endl;
+	tcout << TEXT("Debug privileges enabled!\n") << std::endl;
 
 Release: if (hToken) CloseHandle(hToken);
 
-	tcout << TEXT("Enter ProcessId: ");
-	DWORD dwProcessId = 0;
-	tcin >> dwProcessId;
+	//====================================================================================================================
+	//========================================= Searching processId and attach ===========================================
+	//====================================================================================================================
+
+	tcout << TEXT("Enter process name: ");
+	tcin >> ProcessName;
 	tcin.get();
+
+	hSnapshop = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+
+	if (Process32First(hSnapshop, &ProcessEntry)) {
+		do {
+			if (tcscmp(ProcessEntry.szExeFile, ProcessName) == 0) {
+				dwProcessId = ProcessEntry.th32ProcessID;
+				break;
+			}
+		} while (Process32Next(hSnapshop, &ProcessEntry));
+	}
+
+	CloseHandle(hSnapshop);
 
 	if (!DebugActiveProcess(dwProcessId)) {
 		tcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
@@ -55,32 +86,47 @@ Release: if (hToken) CloseHandle(hToken);
 	}
 	else tcout << TEXT("Process attached!\n") << std::endl;
 
-	HANDLE hProcess = nullptr;
-	DEBUG_EVENT DbgEvent = { 0 };
-	TCHAR FileName[MAX_PATH] = TEXT("");
-	WIN32_FIND_DATA Data = { 0 };
-	HMODULE hMod = nullptr;
+	//====================================================================================================================	
+	//====================================================================================================================
+	//====================================================================================================================
 
-	hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, FALSE, dwProcessId);
+	hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, dwProcessId);
+
+	if (EnumProcessModules(hProcess, hModule, sizeof(hModule), &cbNeeded))
+		for (DWORD i = 0; i < (cbNeeded / sizeof(HMODULE)); i++)
+			if (GetModuleFileNameEx(hProcess, hModule[i], ModuleName, sizeof(ModuleName) / sizeof(TCHAR))) {
+				GetModuleInformation(hProcess, hModule[i], &ModuleInfo, sizeof(MODULEINFO));
+				FindFirstFile(ModuleName, &Win32FindData);
+				tcout << hModule[i] << TEXT(" - ") << Win32FindData.cFileName << std::endl;
+			}
+
+	CloseHandle(hProcess);
+
+	//====================================================================================================================
+	//====================================================================================================================
+	//====================================================================================================================
 
 	do {
-		if (!WaitForDebugEvent(&DbgEvent, INFINITE)) {
+		if (!WaitForDebugEvent(&DebugEvent, INFINITE)) {
 			tcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
 			tcin.get();
 			exit(-1);
 		}
 
-		switch (DbgEvent.dwDebugEventCode) {
+		switch (DebugEvent.dwDebugEventCode) {
 
 		case EXCEPTION_DEBUG_EVENT:
 			break;
 
 		case CREATE_THREAD_DEBUG_EVENT:
-			case CREATE_THREAD_DEBUG_EVENT:
-			tcout << TEXT(" dwThreadId: ") << DbgEvent.dwThreadId << TEXT(" (Start Address: 0x")
-				<< DbgEvent.u.CreateThread.lpStartAddress << TEXT(", Name: )") << std::endl;
-			break;
+				tcout << TEXT(" dwThreadId: ") << DebugEvent.dwThreadId << TEXT(" (Start address: 0x") <<
+				DebugEvent.u.CreateThread.lpStartAddress << TEXT(", Name: ") << TEXT(")") << std::endl;
 
+				//if ((INT)DebugEvent.u.CreateThread.lpStartAddress == 0x7710B370)
+					//if (TerminateThread(DebugEvent.u.CreateThread.hThread, 0))
+						//tcout << TEXT("\ndwThreadId: ") << DebugEvent.dwThreadId << TEXT(" {ntdll.DbgUiRemoteBreakin is terminated!") << std::endl;
+			break;
+			
 		case CREATE_PROCESS_DEBUG_EVENT:
 			break;
 
@@ -91,11 +137,10 @@ Release: if (hToken) CloseHandle(hToken);
 			break;
 
 		case LOAD_DLL_DEBUG_EVENT:
-			GetFinalPathNameByHandle(DbgEvent.u.LoadDll.hFile, FileName, MAX_PATH, FILE_NAME_NORMALIZED);
-			FindFirstFile(FileName, &Data);
-			hMod = LoadLibrary(Data.cFileName);
-			if (!hMod) hMod = LoadLibrary(FileName);
-			tcout << Data.cFileName << TEXT(" - 0x") << hMod << std::endl;
+			//GetFinalPathNameByHandle(DbgEvent.u.LoadDll.hFile, FileName, MAX_PATH, FILE_NAME_NORMALIZED);
+			//FindFirstFile(FileName, &Data);
+			//hMod = GetModuleHandle(Data.cFileName);
+			//tcout << Data.cFileName << TEXT(" - 0x") << hMod << std::endl;
 			break;
 
 		case UNLOAD_DLL_DEBUG_EVENT:
@@ -111,13 +156,17 @@ Release: if (hToken) CloseHandle(hToken);
 			break;
 		}
 
-		ContinueDebugEvent(DbgEvent.dwProcessId, DbgEvent.dwThreadId, DBG_CONTINUE);
+		ContinueDebugEvent(DebugEvent.dwProcessId, DebugEvent.dwThreadId, DBG_CONTINUE);
 
-	} while (DbgEvent.u.ExitProcess.dwExitCode != 0);
+		
+
+	} while (DebugEvent.u.ExitProcess.dwExitCode != 0);
+
+	//====================================================================================================================
+	//============================================= Deattach and exit ====================================================
+	//====================================================================================================================
 
 	tcin.get();
-
-	CloseHandle(hProcess);
 
 	if (!DebugActiveProcessStop(dwProcessId)) {
 		tcout << TEXT("Error: 0x") << std::hex << GetLastError() << std::endl;
